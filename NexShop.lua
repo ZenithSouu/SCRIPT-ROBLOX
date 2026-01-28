@@ -78,40 +78,35 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- ENVOYER UN MESSAGE (Méthodes Officielles pour écrire dans le chat)
+-- ENVOYER UN MESSAGE (Force Brute sur tous les canaux)
 local function SendChatSignal(message)
     task.spawn(function()
-        -- 1. Nouveau Système : TextChatService
         local TextChatService = game:GetService("TextChatService")
+        
+        -- Si c'est le nouveau chat (TextChatService)
         if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
             local textChannels = TextChatService:FindFirstChild("TextChannels")
             if textChannels then
-                -- On cherche le canal général standard
-                local general = textChannels:FindFirstChild("RBXGeneral")
-                if general then
-                    pcall(function() general:SendAsync(message) end)
-                    print("[Nex] Envoyé sur RBXGeneral")
-                else
-                    -- Fallback : On essaie sur tous les canaux trouvés
-                    for _, channel in pairs(textChannels:GetChildren()) do
-                        if channel:IsA("TextChannel") then
-                            pcall(function() channel:SendAsync(message) end)
-                        end
+                -- On essaie d'envoyer sur ABSOLUMENT TOUS les canaux disponibles
+                for _, channel in pairs(textChannels:GetChildren()) do
+                    if channel:IsA("TextChannel") then
+                        print("[Nex] Tentative sur le canal : " .. channel.Name)
+                        pcall(function() 
+                            channel:SendAsync(message) 
+                        end)
                     end
-                    print("[Nex] Tentative sur tous les canaux TextChatService")
                 end
             end
-            return -- On ne continue pas vers le Legacy si on est détecté en Nouveau
-        end
-
-        -- 2. Ancien Système : LegacyChatService
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local ChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-        if ChatEvents then
-            local SayMessageRequest = ChatEvents:FindFirstChild("SayMessageRequest")
-            if SayMessageRequest then
-                SayMessageRequest:FireServer(message, "All")
-                print("[Nex] Envoyé via Legacy SayMessageRequest")
+        else
+            -- Si c'est l'ancien chat (Legacy), on force via le RemoteEvent
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local Event = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+            if Event then
+                local Say = Event:FindFirstChild("SayMessageRequest")
+                if Say then
+                    Say:FireServer(message, "All")
+                    print("[Nex] Forçage via Legacy Chat")
+                end
             end
         end
     end)
