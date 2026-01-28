@@ -78,53 +78,41 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- ENVOYER UN MESSAGE (Version User + Backup)
+-- ENVOYER UN MESSAGE (Méthodes Officielles pour écrire dans le chat)
 local function SendChatSignal(message)
     task.spawn(function()
-        local sent = false
-        local player = game.Players.LocalPlayer
-        
-        -- MÉTHODE 1 : game:GetService("Chat") (Ta demande)
-        pcall(function()
-            if player.Character then
-                game:GetService("Chat"):Chat(player.Character, message, Enum.ChatColor.White)
-                sent = true
-                print("[Nex] Envoyé via Chat:Chat()")
-            end
-        end)
-        
-        -- MÉTHODE 2 : DefaultChatSystem (Le remote classique)
-        if not sent then
-            pcall(function()
-                local ReplicatedStorage = game:GetService("ReplicatedStorage")
-                local Event = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") or ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 1)
-                if Event then
-                    local SayMessage = Event:FindFirstChild("SayMessageRequest")
-                    if SayMessage then
-                        SayMessage:FireServer(message, "All")
-                        sent = true
-                        print("[Nex] Envoyé via Legacy Remote")
-                    end
-                end
-            end)
-        end
-        
-        -- MÉTHODE 3 : TextChatService (Nouveau système Roblox)
-        if not sent then
-            pcall(function()
-                local TextChatService = game:GetService("TextChatService")
-                if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-                    local channels = TextChatService:WaitForChild("TextChannels", 2)
-                    if channels then
-                        local general = channels:FindFirstChild("RBXGeneral")
-                        if general then
-                            general:SendAsync(message)
-                            sent = true
-                            print("[Nex] Envoyé via TextChatService")
+        -- 1. Nouveau Système : TextChatService
+        local TextChatService = game:GetService("TextChatService")
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            local textChannels = TextChatService:FindFirstChild("TextChannels")
+            if textChannels then
+                -- On cherche le canal général standard
+                local general = textChannels:FindFirstChild("RBXGeneral")
+                if general then
+                    pcall(function() general:SendAsync(message) end)
+                    print("[Nex] Envoyé sur RBXGeneral")
+                else
+                    -- Fallback : On essaie sur tous les canaux trouvés
+                    for _, channel in pairs(textChannels:GetChildren()) do
+                        if channel:IsA("TextChannel") then
+                            pcall(function() channel:SendAsync(message) end)
                         end
                     end
+                    print("[Nex] Tentative sur tous les canaux TextChatService")
                 end
-            end)
+            end
+            return -- On ne continue pas vers le Legacy si on est détecté en Nouveau
+        end
+
+        -- 2. Ancien Système : LegacyChatService
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local ChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if ChatEvents then
+            local SayMessageRequest = ChatEvents:FindFirstChild("SayMessageRequest")
+            if SayMessageRequest then
+                SayMessageRequest:FireServer(message, "All")
+                print("[Nex] Envoyé via Legacy SayMessageRequest")
+            end
         end
     end)
 end
@@ -132,20 +120,20 @@ end
 -- ÉCOUTER LE CHAT
 local function SetupChatListener(player)
     player.Chatted:Connect(function(msg)
-        -- Cas 1: Quelqu'un arrive et dit "¶¶¶"
+        -- Cas 1: Arrivée d'un utilisateur (¶¶¶)
         if msg == SIGNAL_START then
-            print("[Nex] Arrivée détectée de : " .. player.Name)
+            print("[Nex] Arrivée détectée: " .. player.Name)
             CreateNexTag(player)
             
-            -- On répond "¶" pour qu'il nous voie aussi (si on n'est pas lui)
+            -- On répond pour se signaler aussi (Sauf si c'est nous même qui venons d'arriver)
             if player ~= game.Players.LocalPlayer then
-                task.wait(math.random(1, 2))
+                task.wait(math.random(1, 2)) -- Anti-spam
                 SendChatSignal(SIGNAL_ACK)
             end
             
-        -- Cas 2: Quelqu'un répond "¶" (il a vu mon signal)
+        -- Cas 2: Confirmation d'un utilisateur (¶)
         elseif msg == SIGNAL_ACK then
-            print("[Nex] Réponse reçue de : " .. player.Name)
+            print("[Nex] Confirmation reçue: " .. player.Name)
             CreateNexTag(player)
         end
     end)
@@ -166,17 +154,14 @@ end)
 
 -- LANCEMENT
 task.spawn(function()
-    print("[Nex] Démarrage...")
+    print("[Nex] Démarrage Chat...")
     task.wait(3)
+    SendChatSignal(SIGNAL_START) -- Envoi initial
     
-    -- Premier envoi avec ta méthode
-    SendChatSignal(SIGNAL_START) 
-    
-    -- Sécurité : On réessaie après 5 secondes
+    -- Sécurité: au cas où le chat n'était pas prêt
     task.wait(5)
-    SendChatSignal(SIGNAL_START) 
+    SendChatSignal(SIGNAL_START)
     
-    -- Si on respawn
     game.Players.LocalPlayer.CharacterAdded:Connect(function()
         task.wait(3)
         SendChatSignal(SIGNAL_START)
