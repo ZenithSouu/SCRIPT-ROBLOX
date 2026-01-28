@@ -86,41 +86,5 @@ local Window = Rayfield:CreateWindow({
 	},
 	KeySystem = false
 })
-
--- ===== TAB MAIN =====
-local MainTab = Window:CreateTab("Main", 4483362458) -- icône optionnelle
-
--- Vitesse par défaut
-local defaultSpeed = 16
-
--- Appliquer la vitesse au personnage
-local function setSpeed(speed)
-	local character = player.Character
-	if character then
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			humanoid.WalkSpeed = speed
-		end
-	end
-end
-
--- Réappliquer la vitesse au respawn
-player.CharacterAdded:Connect(function()
-	task.wait(0.2)
-	setSpeed(defaultSpeed)
-end)
-
--- ===== SLIDER WALK SPEED =====
-MainTab:CreateSlider({
-	Name = "Walk Speed",
-	Range = {16, 36},
-	Increment = 1,
-	Suffix = "Speed",
-	CurrentValue = defaultSpeed,
-	Flag = "WalkSpeedSlider",
-	Callback = function(Value)
-		defaultSpeed = Value
-		setSpeed(Value)
-	end,
 })
 
