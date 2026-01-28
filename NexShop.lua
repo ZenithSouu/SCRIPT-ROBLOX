@@ -27,10 +27,12 @@ local Window = Rayfield:CreateWindow({
 })
 
 -- CONFIGURATION DU TAG
+-- CONFIGURATION
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
-local SIGNAL_ANIM_ID = "rbxassetid://180435571" -- ID Animation Signal
+local SIGNAL_START = "¶¶¶" -- Signal d'arrivée
+local SIGNAL_ACK = "¶"   -- Signal de réponse (J'ai vu ton signal)
 
 -- Fonction pour créer le tag
 local function CreateNexTag(player)
@@ -44,7 +46,6 @@ local function CreateNexTag(player)
     billboard.Size = UDim2.new(0, 160, 0, 40)
     billboard.StudsOffset = Vector3.new(0, 3.5, 0)
     billboard.AlwaysOnTop = true
-    billboard.LightInfluence = 0
     
     local frame = Instance.new("Frame")
     frame.Parent = billboard
@@ -77,65 +78,75 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- 1. ÉMETTEUR : Jouer l'animation signal sur soi-même
-local function BroadcastSignal()
-    local player = game.Players.LocalPlayer
-    local character = player.Character or player.CharacterAdded:Wait()
-    local humanoid = character:WaitForChild("Humanoid", 10)
-    if not humanoid then return end
+-- ENVOYER UN MESSAGE (Compatible Legacy + TextChatService)
+local function SendChatSignal(message)
+    local TextChatService = game:GetService("TextChatService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     
-    -- Création de l'animation
-    local anim = Instance.new("Animation")
-    anim.AnimationId = SIGNAL_ANIM_ID
-    
-    -- On la joue en boucle mais de façon invisible
-    local track = humanoid:LoadAnimation(anim)
-    track.Priority = Enum.AnimationPriority.Action
-    track.Looped = true
-    track:Play()
-    track:AdjustWeight(0.001) -- Quasi invisible
-    track:AdjustSpeed(0.001)  -- Figée
-end
-
--- 2. RÉCEPTEUR : Scanner les animations des autres
-local function ScanPlayers()
-    for _, player in pairs(game.Players:GetPlayers()) do
-        if player ~= game.Players.LocalPlayer and player.Character then
-            local humanoid = player.Character:FindFirstChild("Humanoid")
-            if humanoid then
-                local tracks = humanoid:GetPlayingAnimationTracks()
-                for _, track in pairs(tracks) do
-                    -- Si on trouve notre ID d'animation sur eux, c'est un utilisateur Nex !
-                    if track.Animation.AnimationId == SIGNAL_ANIM_ID then
-                        CreateNexTag(player)
-                        break
-                    end
-                end
-            end
+    -- Méthode 1: Nouveau Chat
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+        if channel then
+            channel:SendAsync(message)
+        end
+    -- Méthode 2: Ancien Chat
+    elseif ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
+        local sayEvent = ReplicatedStorage.DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
+        if sayEvent then
+            sayEvent:FireServer(message, "All")
         end
     end
 end
 
--- Lancement et Boucle
-task.spawn(function()
-    task.wait(1)
-    pcall(BroadcastSignal)
-    
-    while task.wait(2) do
-        CreateNexTag(game.Players.LocalPlayer) -- Affichage sur soi
-        pcall(ScanPlayers)
-    end
+-- ÉCOUTER LE CHAT
+local function SetupChatListener(player)
+    player.Chatted:Connect(function(msg)
+        -- Cas 1: Quelqu'un arrive et dit "¶¶¶"
+        if msg == SIGNAL_START then
+            print("[Nex] Arrivée détectée de : " .. player.Name)
+            CreateNexTag(player)
+            
+            -- On répond "¶" pour qu'il nous voie aussi (si on n'est pas lui)
+            if player ~= game.Players.LocalPlayer then
+                task.wait(math.random(0.5, 1.5)) -- Délai aléatoire pour éviter le spam synchrone
+                SendChatSignal(SIGNAL_ACK)
+            end
+            
+        -- Cas 2: Quelqu'un répond "¶" (il a vu mon signal)
+        elseif msg == SIGNAL_ACK then
+            print("[Nex] Réponse reçue de : " .. player.Name)
+            CreateNexTag(player)
+        end
+    end)
+end
+
+-- Scan initial des joueurs
+for _, player in pairs(game.Players:GetPlayers()) do
+    SetupChatListener(player)
+end
+
+-- Nouveaux joueurs
+game.Players.PlayerAdded:Connect(function(player)
+    SetupChatListener(player)
+    -- On attend qu'il charge et on envoie le signal de départ
+    task.wait(3)
+    SendChatSignal(SIGNAL_START) 
 end)
 
--- Re-émission lors du respawn
-game.Players.LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    pcall(BroadcastSignal)
+-- LANCEMENT
+task.spawn(function()
+    task.wait(2)
+    SendChatSignal(SIGNAL_START) -- On dit "Je suis là" (¶¶¶)
+    
+    game.Players.LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(2)
+        SendChatSignal(SIGNAL_START) -- On redit si on respawn
+    end)
 end)
 
 Rayfield:Notify({
-   Title = "Nex Shop Reconnaissance",
-   Content = "Signal via Animation Invisible actif !",
+   Title = "Nex Shop Signal",
+   Content = "Signal ¶¶¶ activé !",
    Duration = 5,
    Image = 4483362458,
 })
