@@ -89,31 +89,21 @@ end
 local function SendChatSignal(message)
     task.spawn(function()
         local TextChatService = game:GetService("TextChatService")
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        
-        -- Méthode 1: TextChatService (Nouveau système - Modern Chat)
-        -- On vérifie explicitement si le jeu utilise le nouveau système
-        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-            local textChannels = TextChatService:FindFirstChild("TextChannels")
-            local generalChannel = textChannels and textChannels:FindFirstChild("RBXGeneral")
-            
-            if generalChannel then
-                pcall(function()
-                    generalChannel:SendAsync(message)
-                end)
+
+        local success, err = pcall(function()
+            -- Utilisation stricte de la méthode fournie par l'utilisateur
+            local general = TextChatService:FindFirstChild("TextChannels") and TextChatService.TextChannels:WaitForChild("RBXGeneral", 10)
+            if general then
+                general:SendAsync(message)
+            else
+                print("[Nex] Serveur incompatible : RBXGeneral introuvable (Legacy Chat ?)")
             end
-            
-        -- Méthode 2: Legacy Chat System (Ancien système)
-        -- C'est la méthode standard pour les anciens jeux Roblox
+        end)
+
+        if success then
+            print("[Nex] Message envoyé: " .. message)
         else
-            local defaultChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-            local sayMessageRequest = defaultChatEvents and defaultChatEvents:FindFirstChild("SayMessageRequest")
-            
-            if sayMessageRequest then
-                pcall(function()
-                    sayMessageRequest:FireServer(message, "All")
-                end)
-            end
+            print("[Nex] Erreur d'envoi:", err)
         end
     end)
 end
