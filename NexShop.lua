@@ -27,18 +27,23 @@ local Window = Rayfield:CreateWindow({
 })
 
 -- CONFIGURATION DU TAG
--- CONFIGURATION
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
-local SIGNAL_START = "¶¶¶" -- Signal d'arrivée
-local SIGNAL_ACK = "¶"   -- Signal de réponse (J'ai vu ton signal)
+local SIGNAL_START = "¶¶¶"
+local SIGNAL_ACK = "¶"
 
 -- Fonction pour créer le tag
 local function CreateNexTag(player)
     if not player or not player.Character then return end
     local head = player.Character:FindFirstChild("Head")
-    if not head or head:FindFirstChild("NexShopTag") then return end
+    if not head then return end
+    
+    -- Supprimer l'ancien tag s'il existe
+    local oldTag = head:FindFirstChild("NexShopTag")
+    if oldTag then
+        oldTag:Destroy()
+    end
     
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "NexShopTag"
@@ -46,6 +51,8 @@ local function CreateNexTag(player)
     billboard.Size = UDim2.new(0, 160, 0, 40)
     billboard.StudsOffset = Vector3.new(0, 3.5, 0)
     billboard.AlwaysOnTop = true
+    billboard.MaxDistance = 100
+    billboard.Enabled = true
     
     local frame = Instance.new("Frame")
     frame.Parent = billboard
@@ -78,51 +85,136 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- ENVOYER UN MESSAGE (Force Brute sur tous les canaux)
+-- MÉTHODES D'ENVOI DE MESSAGES (multiples fallbacks)
 local function SendChatSignal(message)
     task.spawn(function()
         local TextChatService = game:GetService("TextChatService")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
         
-        -- Si c'est le nouveau chat (TextChatService)
+        print("[Nex] Tentative d'envoi: " .. message)
+        
+        -- Méthode 1: Nouveau TextChatService (Chat moderne)
         if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
             local textChannels = TextChatService:FindFirstChild("TextChannels")
             if textChannels then
-                -- On essaie d'envoyer sur ABSOLUMENT TOUS les canaux disponibles
+                -- Essayer RBXGeneral d'abord
+                local generalChannel = textChannels:FindFirstChild("RBXGeneral")
+                if generalChannel then
+                    local success, err = pcall(function()
+                        generalChannel:SendAsync(message)
+                    end)
+                    if success then
+                        print("[Nex] Message envoyé via RBXGeneral")
+                        return
+                    end
+                end
+                
+                -- Essayer tous les autres canaux
                 for _, channel in pairs(textChannels:GetChildren()) do
-                    if channel:IsA("TextChannel") then
-                        print("[Nex] Tentative sur le canal : " .. channel.Name)
-                        pcall(function() 
-                            channel:SendAsync(message) 
+                    if channel:IsA("TextChannel") and channel.Name ~= "RBXGeneral" then
+                        local success, err = pcall(function()
+                            channel:SendAsync(message)
                         end)
+                        if success then
+                            print("[Nex] Message envoyé via " .. channel.Name)
+                            return
+                        end
                     end
                 end
             end
-        else
-            -- Si c'est l'ancien chat (Legacy), on force via le RemoteEvent
-            local ReplicatedStorage = game:GetService("ReplicatedStorage")
-            local Event = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-            if Event then
-                local Say = Event:FindFirstChild("SayMessageRequest")
-                if Say then
-                    Say:FireServer(message, "All")
-                    print("[Nex] Forçage via Legacy Chat")
+        end
+        
+        -- Méthode 2: Legacy Chat System
+        local events = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if events then
+            -- Essayer SayMessageRequest d'abord
+            local sayEvent = events:FindFirstChild("SayMessageRequest")
+            if sayEvent then
+                local success, err = pcall(function()
+                    sayEvent:FireServer(message, "All")
+                end)
+                if success then
+                    print("[Nex] Message envoyé via Legacy SayMessageRequest")
+                    return
+                end
+            end
+            
+            -- Essayer OnMessageDoneFiltering
+            local filterEvent = events:FindFirstChild("OnMessageDoneFiltering")
+            if filterEvent then
+                local success, err = pcall(function()
+                    local args = {
+                        message,
+                        LocalPlayer,
+                        "All"
+                    }
+                    filterEvent:FireServer(unpack(args))
+                end)
+                if success then
+                    print("[Nex] Message envoyé via OnMessageDoneFiltering")
+                    return
                 end
             end
         end
+        
+        -- Méthode 3: ReplicatedStorage Events généraux
+        local chatEvents = {
+            "DefaultChatSystemChatEvents",
+            "ChatEvents",
+            "ChatService",
+            "Chat"
+        }
+        
+        for _, eventName in pairs(chatEvents) do
+            local eventFolder = ReplicatedStorage:FindFirstChild(eventName)
+            if eventFolder then
+                for _, child in pairs(eventFolder:GetChildren()) do
+                    if child:IsA("RemoteEvent") then
+                        local success, err = pcall(function()
+                            child:FireServer(message, "All")
+                        end)
+                        if success then
+                            print("[Nex] Message envoyé via " .. child.Name)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Méthode 4: TextChatService.TextChannels direct
+        local channels = TextChatService:GetChildren()
+        for _, channel in pairs(channels) do
+            if channel:IsA("TextChannel") then
+                local success, err = pcall(function()
+                    channel:SendAsync(message)
+                end)
+                if success then
+                    print("[Nex] Message envoyé via TextChannel direct")
+                    return
+                end
+            end
+        end
+        
+        print("[Nex] Aucune méthode d'envoi n'a fonctionné")
     end)
 end
 
 -- ÉCOUTER LE CHAT
 local function SetupChatListener(player)
     player.Chatted:Connect(function(msg)
+        msg = string.gsub(msg, "%s+", "") -- Enlever les espaces
+        
         -- Cas 1: Arrivée d'un utilisateur (¶¶¶)
         if msg == SIGNAL_START then
             print("[Nex] Arrivée détectée: " .. player.Name)
             CreateNexTag(player)
             
-            -- On répond pour se signaler aussi (Sauf si c'est nous même qui venons d'arriver)
+            -- On répond pour se signaler aussi
             if player ~= game.Players.LocalPlayer then
-                task.wait(math.random(1, 2)) -- Anti-spam
+                task.wait(math.random(0.5, 1.5))
                 SendChatSignal(SIGNAL_ACK)
             end
             
@@ -134,38 +226,100 @@ local function SetupChatListener(player)
     end)
 end
 
+-- Fonction pour vérifier si un joueur a déjà le tag
+local function CheckAndCreateTag(player)
+    if player.Character then
+        local head = player.Character:FindFirstChild("Head")
+        if head and not head:FindFirstChild("NexShopTag") then
+            CreateNexTag(player)
+        end
+    end
+end
+
+-- Initialisation
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
 -- Scan initial des joueurs
-for _, player in pairs(game.Players:GetPlayers()) do
+for _, player in pairs(Players:GetPlayers()) do
     SetupChatListener(player)
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        CheckAndCreateTag(player)
+    end)
 end
 
 -- Nouveaux joueurs
-game.Players.PlayerAdded:Connect(function(player)
+Players.PlayerAdded:Connect(function(player)
     SetupChatListener(player)
-    -- On attend qu'il charge et on envoie le signal de départ
-    task.wait(4)
-    SendChatSignal(SIGNAL_START) 
-end)
-
--- LANCEMENT
-task.spawn(function()
-    print("[Nex] Démarrage Chat...")
-    task.wait(3)
-    SendChatSignal(SIGNAL_START) -- Envoi initial
-    
-    -- Sécurité: au cas où le chat n'était pas prêt
-    task.wait(5)
-    SendChatSignal(SIGNAL_START)
-    
-    game.Players.LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(3)
-        SendChatSignal(SIGNAL_START)
+    player.CharacterAdded:Connect(function()
+        task.wait(1)
+        CheckAndCreateTag(player)
     end)
 end)
 
+-- Créer notre propre tag
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(2)
+    CreateNexTag(LocalPlayer)
+end)
+
+-- LANCEMENT PRINCIPAL
+task.spawn(function()
+    print("[Nex] Initialisation du système...")
+    
+    -- Attendre que le personnage soit chargé
+    if not LocalPlayer.Character then
+        LocalPlayer.CharacterAdded:Wait()
+    end
+    
+    task.wait(2)
+    CreateNexTag(LocalPlayer)
+    
+    -- Envoyer le signal initial avec plusieurs tentatives
+    for i = 1, 3 do
+        task.wait(i * 2) -- Attendre 2s, puis 4s, puis 6s
+        print("[Nex] Tentative d'envoi #" .. i)
+        SendChatSignal(SIGNAL_START)
+    end
+    
+    -- Réessayer après quelques minutes (au cas où le chat se charge plus tard)
+    task.wait(60)
+    SendChatSignal(SIGNAL_START)
+end)
+
+-- Notifications
 Rayfield:Notify({
    Title = "Nex Shop Signal",
-   Content = "Signal ¶¶¶ activé !",
-   Duration = 5,
+   Content = "Système de tags activé ! Signal: ¶¶¶",
+   Duration = 6,
    Image = 4483362458,
+})
+
+-- Ajouter un bouton pour envoyer manuellement
+local MainTab = Window:CreateTab("Principal", 4483362458)
+local MainSection = MainTab:CreateSection("Signal System")
+
+MainTab:CreateButton({
+   Name = "Envoyer Signal Manuellement",
+   Callback = function()
+       SendChatSignal(SIGNAL_START)
+       Rayfield:Notify({
+           Title = "Signal Envoyé",
+           Content = "Signal ¶¶¶ envoyé dans le chat",
+           Duration = 3,
+       })
+   end,
+})
+
+MainTab:CreateButton({
+   Name = "Créer Tag sur Mon Personnage",
+   Callback = function()
+       CreateNexTag(LocalPlayer)
+       Rayfield:Notify({
+           Title = "Tag Créé",
+           Content = "Tag créé sur votre personnage",
+           Duration = 3,
+       })
+   end,
 })
