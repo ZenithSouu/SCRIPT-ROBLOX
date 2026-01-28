@@ -1,43 +1,19 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- ==========================================
+-- PARTIE 1 : SYSTÈME DE TAG & CHAT (SANS MENU)
+-- ==========================================
 
--- Création de la fenêtre (VIDE comme demandé)
-local Window = Rayfield:CreateWindow({
-    Name = "Nex Shop Script UNIVERSAL",
-    LoadingTitle = "Nex Shop Script",
-    LoadingSubtitle = "by ZenithSouu",
-    ConfigurationSaving = {
-       Enabled = true,
-       FolderName = "NexShop", 
-       FileName = "NexShopConfig"
-    },
-    Discord = {
-       Enabled = false,
-       Invite = "noinvite", 
-       RememberJoins = true 
-    },
-    KeySystem = false, 
-    KeySettings = {
-       Title = "Nex Shop",
-       Subtitle = "Key System",
-       Note = "No method of obtaining the key is provided",
-       FileName = "NexShopKey", 
-       SaveKey = true, 
-       GrabKeyFromSite = false, 
-       Key = {"NexShop123"} 
-    }
-})
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
 
--- === CONFIGURATION ===
+-- Configuration
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
--- Message texte simple pour éviter le filtre
 local SIGNAL_MSG = "NexShop-User-Active" 
 
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-
--- === 1. FONCTION TAG (VISUEL) ===
+-- 1. Fonction pour créer le visuel (Tag)
 local function CreateNexTag(player)
     if not player or not player.Character then return end
     local head = player.Character:FindFirstChild("Head")
@@ -85,40 +61,43 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- === 2. FONCTION D'ENVOI EXACTE ===
+-- 2. Fonction d'envoi du message (Ta méthode exacte)
 local function SendTriggerMessage()
     task.spawn(function()
-        -- On attend que le jeu soit vraiment chargé
+        -- On attend juste un instant que le personnage spawn pour ne pas bugger
         if not game:IsLoaded() then game.Loaded:Wait() end
-        task.wait(3) -- Délai de sécurité OBLIGATOIRE pour ne pas être invisible
+        task.wait(2) 
 
-        local TextChatService = game:GetService("TextChatService")
-        
-        -- Méthode 1 : TextChatService (Ton code qui marche)
-        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-            pcall(function()
-                local channel = TextChatService.TextChannels:WaitForChild("RBXGeneral", 10)
-                if channel then
-                    channel:SendAsync(SIGNAL_MSG)
+        local success, err = pcall(function()
+            -- SI NOUVEAU CHAT (99% des jeux récents)
+            if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+                local channels = TextChatService:WaitForChild("TextChannels", 10)
+                if channels then
+                    local general = channels:WaitForChild("RBXGeneral", 10)
+                    if general then
+                        general:SendAsync(SIGNAL_MSG)
+                    end
                 end
-            end)
+            
+            -- SI ANCIEN CHAT (Legacy)
+            else
+                local defaultChat = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+                if defaultChat then
+                    defaultChat.SayMessageRequest:FireServer(SIGNAL_MSG, "All")
+                end
+            end
+        end)
         
-        -- Méthode 2 : Fallback Legacy (Si le jeu n'utilise pas TextChatService)
-        else
-            pcall(function()
-                game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(SIGNAL_MSG, "All")
-            end)
-        end
+        if success then print("[Nex] Signal envoyé au chat") end
     end)
 end
 
--- === 3. ECOUTE DU CHAT ===
+-- 3. Fonction pour écouter les autres (Réception)
 local function SetupListener()
-    local TextChatService = game:GetService("TextChatService")
-    
     -- Nouveau Chat
     if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
         TextChatService.MessageReceived:Connect(function(textChatMessage)
+            -- On vérifie si le message contient le signal
             if string.find(textChatMessage.Text, "NexShop") then
                 local source = textChatMessage.TextSource
                 if source then
@@ -142,16 +121,44 @@ local function SetupListener()
     end
 end
 
--- === LANCEMENT ===
+-- EXECUTION DU SYSTÈME (AVANT LE MENU)
 task.spawn(function()
-    CreateNexTag(LocalPlayer) -- Se tag soi-même direct
-    SetupListener() -- Active l'écoute
+    CreateNexTag(LocalPlayer) -- Tag sur toi
+    SetupListener() -- Écoute les autres
     SendTriggerMessage() -- Envoie le message
 end)
 
-Rayfield:Notify({
-   Title = "Nex Shop",
-   Content = "Script chargé (Menu vide)",
-   Duration = 3,
-   Image = 4483362458,
+
+-- ==========================================
+-- PARTIE 2 : MENU RAYFIELD (APRÈS)
+-- ==========================================
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Nex Shop Script UNIVERSAL",
+    LoadingTitle = "Nex Shop Script",
+    LoadingSubtitle = "by ZenithSouu",
+    ConfigurationSaving = {
+       Enabled = true,
+       FolderName = "NexShop", 
+       FileName = "NexShopConfig"
+    },
+    Discord = {
+       Enabled = false,
+       Invite = "noinvite", 
+       RememberJoins = true 
+    },
+    KeySystem = false, 
+    KeySettings = {
+       Title = "Nex Shop",
+       Subtitle = "Key System",
+       Note = "No method of obtaining the key is provided",
+       FileName = "NexShopKey", 
+       SaveKey = true, 
+       GrabKeyFromSite = false, 
+       Key = {"NexShop123"} 
+    }
 })
+
+-- Le menu est vide comme demandé.
