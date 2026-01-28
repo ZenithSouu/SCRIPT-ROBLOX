@@ -85,120 +85,36 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- MÉTHODES D'ENVOI DE MESSAGES (multiples fallbacks)
+-- MÉTHODES D'ENVOI DE MESSAGES (API Roblox Chat)
 local function SendChatSignal(message)
     task.spawn(function()
-        local TextChatService = game:GetService("TextChatService")
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local ChatService = game:GetService("Chat")
         local Players = game:GetService("Players")
         local LocalPlayer = Players.LocalPlayer
         
         print("[Nex] Tentative d'envoi: " .. message)
         
-        -- Méthode 1: Nouveau TextChatService (Chat moderne)
-        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-            local textChannels = TextChatService:FindFirstChild("TextChannels")
-            if textChannels then
-                -- Essayer RBXGeneral d'abord
-                local generalChannel = textChannels:FindFirstChild("RBXGeneral")
-                if generalChannel then
-                    local success, err = pcall(function()
-                        generalChannel:SendAsync(message)
-                    end)
-                    if success then
-                        print("[Nex] Message envoyé via RBXGeneral")
-                        return
-                    end
-                end
-                
-                -- Essayer tous les autres canaux
-                for _, channel in pairs(textChannels:GetChildren()) do
-                    if channel:IsA("TextChannel") and channel.Name ~= "RBXGeneral" then
-                        local success, err = pcall(function()
-                            channel:SendAsync(message)
-                        end)
-                        if success then
-                            print("[Nex] Message envoyé via " .. channel.Name)
-                            return
-                        end
-                    end
-                end
-            end
+        -- Attendre que le personnage soit chargé
+        if not LocalPlayer.Character then
+            LocalPlayer.CharacterAdded:Wait()
         end
         
-        -- Méthode 2: Legacy Chat System
-        local events = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-        if events then
-            -- Essayer SayMessageRequest d'abord
-            local sayEvent = events:FindFirstChild("SayMessageRequest")
-            if sayEvent then
-                local success, err = pcall(function()
-                    sayEvent:FireServer(message, "All")
-                end)
-                if success then
-                    print("[Nex] Message envoyé via Legacy SayMessageRequest")
-                    return
-                end
-            end
-            
-            -- Essayer OnMessageDoneFiltering
-            local filterEvent = events:FindFirstChild("OnMessageDoneFiltering")
-            if filterEvent then
-                local success, err = pcall(function()
-                    local args = {
-                        message,
-                        LocalPlayer,
-                        "All"
-                    }
-                    filterEvent:FireServer(unpack(args))
-                end)
-                if success then
-                    print("[Nex] Message envoyé via OnMessageDoneFiltering")
-                    return
-                end
-            end
+        local head = LocalPlayer.Character:FindFirstChild("Head")
+        if not head then
+            warn("[Nex] Head non trouvé!")
+            return
         end
         
-        -- Méthode 3: ReplicatedStorage Events généraux
-        local chatEvents = {
-            "DefaultChatSystemChatEvents",
-            "ChatEvents",
-            "ChatService",
-            "Chat"
-        }
+        -- MÉTHODE PRINCIPALE: Chat:Chat() - La plus fiable
+        local success, err = pcall(function()
+            ChatService:Chat(head, message, Enum.ChatColor.White)
+        end)
         
-        for _, eventName in pairs(chatEvents) do
-            local eventFolder = ReplicatedStorage:FindFirstChild(eventName)
-            if eventFolder then
-                for _, child in pairs(eventFolder:GetChildren()) do
-                    if child:IsA("RemoteEvent") then
-                        local success, err = pcall(function()
-                            child:FireServer(message, "All")
-                        end)
-                        if success then
-                            print("[Nex] Message envoyé via " .. child.Name)
-                            return
-                        end
-                    end
-                end
-            end
+        if success then
+            print("[Nex] ✓ Message envoyé via Chat:Chat() API")
+        else
+            warn("[Nex] ✗ Erreur Chat:Chat(): " .. tostring(err))
         end
-        
-        -- Méthode 4: TextChatService.TextChannels direct
-        local channels = TextChatService:GetChildren()
-        for _, channel in pairs(channels) do
-            if channel:IsA("TextChannel") then
-                local success, err = pcall(function()
-                    channel:SendAsync(message)
-                end)
-                if success then
-                    print("[Nex] Message envoyé via TextChannel direct")
-                    return
-                end
-            end
-        end
-        
-        print("[Nex] Aucune méthode d'envoi n'a fonctionné")
     end)
 end
 
