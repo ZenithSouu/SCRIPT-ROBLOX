@@ -30,33 +30,14 @@ local Window = Rayfield:CreateWindow({
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
-local MARKER_NAME = "NexShopMarker_" .. game.Players.LocalPlayer.UserId -- Marqueur unique
+local SIGNAL_ANIM_ID = "rbxassetid://180435571" -- ID Animation Signal
 
--- Fonction pour créer le marqueur invisible sur soi-même
-local function CreateSelfMarker()
-    local player = game.Players.LocalPlayer
-    if not player.Character then return end
-    
-    local head = player.Character:FindFirstChild("Head")
-    if not head or head:FindFirstChild(MARKER_NAME) then return end
-    
-    -- Marqueur invisible que les autres scripts peuvent détecter
-    local marker = Instance.new("BillboardGui")
-    marker.Name = MARKER_NAME
-    marker.Parent = head
-    marker.Size = UDim2.new(0, 0, 0, 0)
-    marker.Enabled = false -- Invisible pour tout le monde
-    marker:SetAttribute("NexShopUser", true) -- Attribut de reconnaissance
-end
-
--- Fonction pour créer le tag visible au-dessus de la tête
+-- Fonction pour créer le tag
 local function CreateNexTag(player)
     if not player or not player.Character then return end
-    
     local head = player.Character:FindFirstChild("Head")
     if not head or head:FindFirstChild("NexShopTag") then return end
     
-    -- Création du BillboardGui visible
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "NexShopTag"
     billboard.Parent = head
@@ -65,7 +46,6 @@ local function CreateNexTag(player)
     billboard.AlwaysOnTop = true
     billboard.LightInfluence = 0
     
-    -- Cadre d'alignement
     local frame = Instance.new("Frame")
     frame.Parent = billboard
     frame.Size = UDim2.new(1, 0, 1, 0)
@@ -78,7 +58,6 @@ local function CreateNexTag(player)
     layout.VerticalAlignment = Enum.VerticalAlignment.Center
     layout.Padding = UDim.new(0, 8)
     
-    -- Logo "N" (.png)
     local logo = Instance.new("ImageLabel")
     logo.Parent = frame
     logo.BackgroundTransparency = 1
@@ -86,7 +65,6 @@ local function CreateNexTag(player)
     logo.Image = TAG_IMAGE_ID
     logo.ScaleType = Enum.ScaleType.Fit
     
-    -- Texte
     local label = Instance.new("TextLabel")
     label.Parent = frame
     label.BackgroundTransparency = 1
@@ -95,82 +73,69 @@ local function CreateNexTag(player)
     label.TextColor3 = TAG_COLOR
     label.TextSize = 14
     label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextStrokeTransparency = 0
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
-    
-    print("[Nex Shop] Tag créé pour:", player.Name)
 end
 
--- Fonction pour vérifier si un joueur utilise le script
-local function IsNexUser(player)
-    if not player.Character then return false end
-    local head = player.Character:FindFirstChild("Head")
-    if not head then return false end
+-- 1. ÉMETTEUR : Jouer l'animation signal sur soi-même
+local function BroadcastSignal()
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid", 10)
+    if not humanoid then return end
     
-    -- On cherche un marqueur Nex dans la tête du joueur
-    for _, child in pairs(head:GetChildren()) do
-        if child:IsA("BillboardGui") and child.Name:match("NexShopMarker_") then
-            return true
-        end
-    end
-    return false
+    -- Création de l'animation
+    local anim = Instance.new("Animation")
+    anim.AnimationId = SIGNAL_ANIM_ID
+    
+    -- On la joue en boucle mais de façon invisible
+    local track = humanoid:LoadAnimation(anim)
+    track.Priority = Enum.AnimationPriority.Action
+    track.Looped = true
+    track:Play()
+    track:AdjustWeight(0.001) -- Quasi invisible
+    track:AdjustSpeed(0.001)  -- Figée
 end
 
--- Boucle de scan permanente pour détecter les autres utilisateurs
-local function StartScanning()
-    task.spawn(function()
-        while task.wait(2) do -- Scan toutes les 2 secondes
-            -- On se crée notre propre marqueur
-            CreateSelfMarker()
-            
-            -- On scanne tous les joueurs
-            for _, player in pairs(game.Players:GetPlayers()) do
-                if player ~= game.Players.LocalPlayer then
-                    if IsNexUser(player) then
+-- 2. RÉCEPTEUR : Scanner les animations des autres
+local function ScanPlayers()
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= game.Players.LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                local tracks = humanoid:GetPlayingAnimationTracks()
+                for _, track in pairs(tracks) do
+                    -- Si on trouve notre ID d'animation sur eux, c'est un utilisateur Nex !
+                    if track.Animation.AnimationId == SIGNAL_ANIM_ID then
                         CreateNexTag(player)
+                        break
                     end
                 end
             end
         end
-    end)
-end
-
--- Gestion du respawn pour recréer le marqueur
-game.Players.LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(2)
-    CreateSelfMarker()
-end)
-
--- Gestion du respawn des autres joueurs
-for _, player in pairs(game.Players:GetPlayers()) do
-    if player ~= game.Players.LocalPlayer then
-        player.CharacterAdded:Connect(function()
-            task.wait(2)
-            if IsNexUser(player) then
-                CreateNexTag(player)
-            end
-        end)
     end
 end
 
-game.Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        task.wait(2)
-        if IsNexUser(player) then
-            CreateNexTag(player)
-        end
-    end)
+-- Lancement et Boucle
+task.spawn(function()
+    task.wait(1)
+    pcall(BroadcastSignal)
+    
+    while task.wait(2) do
+        CreateNexTag(game.Players.LocalPlayer) -- Affichage sur soi
+        pcall(ScanPlayers)
+    end
 end)
 
--- LANCEMENT AUTOMATIQUE
-task.wait(1)
-CreateSelfMarker()
-StartScanning()
+-- Re-émission lors du respawn
+game.Players.LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    pcall(BroadcastSignal)
+end)
 
 Rayfield:Notify({
-   Title = "Nex Shop Auto-Tag",
-   Content = "Système de scan actif !",
+   Title = "Nex Shop Reconnaissance",
+   Content = "Signal via Animation Invisible actif !",
    Duration = 5,
    Image = 4483362458,
 })
