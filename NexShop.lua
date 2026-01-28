@@ -86,5 +86,24 @@ local Window = Rayfield:CreateWindow({
 	},
 	KeySystem = false
 })
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+local Slider = MainTab:CreateSlider({
+	Name = "WalkSpeed",
+	Range = {16, 36},
+	Increment = 1,
+	Suffix = " Speed",
+	CurrentValue = 16,
+	Flag = "WalkSpeedSlider",
+	Callback = function(Value)
+		if player.Character and player.Character:FindFirstChild("Humanoid") then
+			player.Character.Humanoid.WalkSpeed = Value
+		end
+	end,
 })
 
+player.CharacterAdded:Connect(function(character)
+	local humanoid = character:WaitForChild("Humanoid")
+	humanoid.WalkSpeed = Slider.CurrentValue
+end)
