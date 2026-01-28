@@ -78,24 +78,60 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- ENVOYER UN MESSAGE (Compatible Legacy + TextChatService)
+-- ENVOYER UN MESSAGE (Version "Bourrin" pour être sûr que ça part)
 local function SendChatSignal(message)
-    local TextChatService = game:GetService("TextChatService")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    
-    -- Méthode 1: Nouveau Chat
-    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-        if channel then
-            channel:SendAsync(message)
+    task.spawn(function()
+        local sent = false
+        
+        -- MÉTHODE 1 : DefaultChatSystem (Ancien Chat - Le plus fiable pour les exploits)
+        pcall(function()
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local Event = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") or ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 1)
+            if Event then
+                local SayMessage = Event:FindFirstChild("SayMessageRequest")
+                if SayMessage then
+                    SayMessage:FireServer(message, "All")
+                    sent = true
+                    print("[Nex] Envoyé via Legacy Chat")
+                end
+            end
+        end)
+        
+        -- MÉTHODE 2 : TextChatService (Nouveau Chat)
+        if not sent then
+            pcall(function()
+                local TextChatService = game:GetService("TextChatService")
+                if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+                    local channels = TextChatService:WaitForChild("TextChannels", 2)
+                    if channels then
+                        -- On essaie d'abord le classique RBXGeneral
+                        local general = channels:FindFirstChild("RBXGeneral")
+                        if general then
+                            general:SendAsync(message)
+                            sent = true
+                            print("[Nex] Envoyé via RBXGeneral")
+                        else
+                            -- Si pas trouvé, on essaie TOUS les canaux disponibles
+                            for _, chan in pairs(channels:GetChildren()) do
+                                if chan:IsA("TextChannel") then
+                                    pcall(function() chan:SendAsync(message) end)
+                                    sent = true
+                                    print("[Nex] Envoyé via canal alternatif: " .. chan.Name)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
         end
-    -- Méthode 2: Ancien Chat
-    elseif ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
-        local sayEvent = ReplicatedStorage.DefaultChatSystemChatEvents:FindFirstChild("SayMessageRequest")
-        if sayEvent then
-            sayEvent:FireServer(message, "All")
+        
+        -- MÉTHODE 3 : Fallback via Players (Rarement utilisé mais peut marcher)
+        if not sent then
+            pcall(function()
+                game.Players:Chat(message)
+            end)
         end
-    end
+    end)
 end
 
 -- ÉCOUTER LE CHAT
@@ -108,7 +144,7 @@ local function SetupChatListener(player)
             
             -- On répond "¶" pour qu'il nous voie aussi (si on n'est pas lui)
             if player ~= game.Players.LocalPlayer then
-                task.wait(math.random(0.5, 1.5)) -- Délai aléatoire pour éviter le spam synchrone
+                task.wait(math.random(1, 2)) -- Petit délai humain
                 SendChatSignal(SIGNAL_ACK)
             end
             
@@ -129,18 +165,23 @@ end
 game.Players.PlayerAdded:Connect(function(player)
     SetupChatListener(player)
     -- On attend qu'il charge et on envoie le signal de départ
-    task.wait(3)
+    task.wait(4) -- On laisse le temps de charger
     SendChatSignal(SIGNAL_START) 
 end)
 
 -- LANCEMENT
 task.spawn(function()
-    task.wait(2)
-    SendChatSignal(SIGNAL_START) -- On dit "Je suis là" (¶¶¶)
+    print("[Nex] Démarrage du système de chat...")
+    task.wait(3) -- On attend bien que le jeu soit chargé
+    SendChatSignal(SIGNAL_START) -- Premier envoi
+    
+    -- Sécurité : On réessaie après 5 secondes si le premier a raté
+    task.wait(5)
+    SendChatSignal(SIGNAL_START) 
     
     game.Players.LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(2)
-        SendChatSignal(SIGNAL_START) -- On redit si on respawn
+        task.wait(3)
+        SendChatSignal(SIGNAL_START)
     end)
 end)
 
