@@ -1,5 +1,6 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- Création de la fenêtre (VIDE comme demandé)
 local Window = Rayfield:CreateWindow({
     Name = "Nex Shop Script UNIVERSAL",
     LoadingTitle = "Nex Shop Script",
@@ -30,25 +31,19 @@ local Window = Rayfield:CreateWindow({
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
+-- Message texte simple pour éviter le filtre
+local SIGNAL_MSG = "NexShop-User-Active" 
 
--- J'ai changé le signal pour du texte normal pour éviter le filtre anti-spam
-local SIGNAL_START = "NexSignal_Start_v1" 
-local SIGNAL_ACK = "NexSignal_Ack_v1"
-
--- Services
-local TextChatService = game:GetService("TextChatService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- === 1. SYSTÈME DE TAG (VISUEL) ===
+-- === 1. FONCTION TAG (VISUEL) ===
 local function CreateNexTag(player)
     if not player or not player.Character then return end
     local head = player.Character:FindFirstChild("Head")
     if not head then return end
     
-    local oldTag = head:FindFirstChild("NexShopTag")
-    if oldTag then oldTag:Destroy() end
+    if head:FindFirstChild("NexShopTag") then return end -- Déjà taggé
     
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "NexShopTag"
@@ -90,111 +85,73 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- === 2. SYSTÈME D'ENVOI (BYPASS FILTRE) ===
-local function SendChatSignal(message)
+-- === 2. FONCTION D'ENVOI EXACTE ===
+local function SendTriggerMessage()
     task.spawn(function()
-        -- Petit délai aléatoire pour simuler un humain
-        task.wait(math.random(0.1, 0.5))
+        -- On attend que le jeu soit vraiment chargé
+        if not game:IsLoaded() then game.Loaded:Wait() end
+        task.wait(3) -- Délai de sécurité OBLIGATOIRE pour ne pas être invisible
 
-        local success, err = pcall(function()
-            -- METHODE A: NOUVEAU CHAT (TextChatService)
-            if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-                local channels = TextChatService:WaitForChild("TextChannels", 3)
-                if channels then
-                    local general = channels:WaitForChild("RBXGeneral", 3)
-                    if general then
-                        general:SendAsync(message)
-                    end
-                end
-            
-            -- METHODE B: ANCIEN CHAT (Legacy)
-            else
-                local defaultChat = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-                if defaultChat then
-                    local request = defaultChat:FindFirstChild("SayMessageRequest")
-                    if request then
-                        request:FireServer(message, "All")
-                    end
-                end
-            end
-        end)
-    end)
-end
-
--- === 3. SYSTÈME DE RÉCEPTION ===
-local function ProcessMessage(player, msg)
-    -- On vérifie si le message contient notre signal (même s'il y a du texte autour)
-    if string.find(msg, SIGNAL_START) then
-        print("[Nex] Utilisateur détecté : " .. player.Name)
-        CreateNexTag(player)
+        local TextChatService = game:GetService("TextChatService")
         
-        -- Si c'est un autre joueur qui signale, on lui répond pour qu'il nous voie aussi
-        if player ~= LocalPlayer then
-            task.wait(1) 
-            SendChatSignal(SIGNAL_ACK)
+        -- Méthode 1 : TextChatService (Ton code qui marche)
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            pcall(function()
+                local channel = TextChatService.TextChannels:WaitForChild("RBXGeneral", 10)
+                if channel then
+                    channel:SendAsync(SIGNAL_MSG)
+                end
+            end)
+        
+        -- Méthode 2 : Fallback Legacy (Si le jeu n'utilise pas TextChatService)
+        else
+            pcall(function()
+                game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(SIGNAL_MSG, "All")
+            end)
         end
-        
-    elseif string.find(msg, SIGNAL_ACK) then
-        print("[Nex] Confirmation reçue de : " .. player.Name)
-        CreateNexTag(player)
-    end
+    end)
 end
 
--- === 4. SETUP DES LISTENERS ===
-local function SetupChatListeners()
-    -- Pour l'ancien chat (Legacy)
-    for _, player in pairs(Players:GetPlayers()) do
-        player.Chatted:Connect(function(msg) ProcessMessage(player, msg) end)
-    end
-    Players.PlayerAdded:Connect(function(player)
-        player.Chatted:Connect(function(msg) ProcessMessage(player, msg) end)
-    end)
-
-    -- Pour le nouveau chat (TextChatService) - C'est ici que ça bloquait souvent
+-- === 3. ECOUTE DU CHAT ===
+local function SetupListener()
+    local TextChatService = game:GetService("TextChatService")
+    
+    -- Nouveau Chat
     if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
         TextChatService.MessageReceived:Connect(function(textChatMessage)
-            local source = textChatMessage.TextSource
-            if source then
-                local player = Players:GetPlayerByUserId(source.UserId)
-                if player then
-                    ProcessMessage(player, textChatMessage.Text)
+            if string.find(textChatMessage.Text, "NexShop") then
+                local source = textChatMessage.TextSource
+                if source then
+                    local player = Players:GetPlayerByUserId(source.UserId)
+                    if player then CreateNexTag(player) end
                 end
             end
+        end)
+    -- Ancien Chat
+    else
+        for _, p in pairs(Players:GetPlayers()) do
+            p.Chatted:Connect(function(msg)
+                if string.find(msg, "NexShop") then CreateNexTag(p) end
+            end)
+        end
+        Players.PlayerAdded:Connect(function(p)
+            p.Chatted:Connect(function(msg)
+                if string.find(msg, "NexShop") then CreateNexTag(p) end
+            end)
         end)
     end
 end
 
--- === 5. DÉMARRAGE ===
+-- === LANCEMENT ===
 task.spawn(function()
-    SetupChatListeners()
-    
-    if not LocalPlayer.Character then
-        LocalPlayer.CharacterAdded:Wait()
-    end
-    
-    -- Se tagger soi-même
-    CreateNexTag(LocalPlayer)
-    
-    -- Attendre un peu que le jeu soit stable avant d'envoyer
-    -- Roblox bloque souvent les messages envoyés à la seconde 0
-    task.wait(4) 
-    
-    SendChatSignal(SIGNAL_START)
+    CreateNexTag(LocalPlayer) -- Se tag soi-même direct
+    SetupListener() -- Active l'écoute
+    SendTriggerMessage() -- Envoie le message
 end)
 
--- UI
 Rayfield:Notify({
    Title = "Nex Shop",
-   Content = "Script chargé. Scan des joueurs...",
-   Duration = 5,
+   Content = "Script chargé (Menu vide)",
+   Duration = 3,
    Image = 4483362458,
-})
-
-local MainTab = Window:CreateTab("Principal", 4483362458)
-MainTab:CreateButton({
-   Name = "Relancer le Signal",
-   Callback = function()
-       SendChatSignal(SIGNAL_START)
-       Rayfield:Notify({Title="Signal", Content="Signal envoyé !", Duration=2})
-   end,
 })
