@@ -26,12 +26,14 @@ local Window = Rayfield:CreateWindow({
     }
 })
 
--- CONFIGURATION
+-- === CONFIGURATION ===
 local TAG_IMAGE_ID = "rbxassetid://128793234260480"
 local TAG_TITLE = "Nex Shop User"
 local TAG_COLOR = Color3.fromRGB(0, 162, 255)
-local SIGNAL_START = "¶¶¶"
-local SIGNAL_ACK = "¶"
+
+-- J'ai changé le signal pour du texte normal pour éviter le filtre anti-spam
+local SIGNAL_START = "NexSignal_Start_v1" 
+local SIGNAL_ACK = "NexSignal_Ack_v1"
 
 -- Services
 local TextChatService = game:GetService("TextChatService")
@@ -39,13 +41,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- 1. FONCTION DE CRÉATION DU TAG
+-- === 1. SYSTÈME DE TAG (VISUEL) ===
 local function CreateNexTag(player)
     if not player or not player.Character then return end
     local head = player.Character:FindFirstChild("Head")
     if not head then return end
     
-    -- Supprimer l'ancien tag s'il existe
     local oldTag = head:FindFirstChild("NexShopTag")
     if oldTag then oldTag:Destroy() end
     
@@ -89,76 +90,67 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- 2. FONCTION D'ENVOI DE MESSAGE (CORRIGÉE)
+-- === 2. SYSTÈME D'ENVOI (BYPASS FILTRE) ===
 local function SendChatSignal(message)
     task.spawn(function()
+        -- Petit délai aléatoire pour simuler un humain
+        task.wait(math.random(0.1, 0.5))
+
         local success, err = pcall(function()
-            -- METHODE A: TextChatService (Nouveau Chat Roblox - Ta méthode)
+            -- METHODE A: NOUVEAU CHAT (TextChatService)
             if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-                local textChannels = TextChatService:WaitForChild("TextChannels", 5)
-                if textChannels then
-                    local general = textChannels:WaitForChild("RBXGeneral", 5)
+                local channels = TextChatService:WaitForChild("TextChannels", 3)
+                if channels then
+                    local general = channels:WaitForChild("RBXGeneral", 3)
                     if general then
                         general:SendAsync(message)
-                        print("[Nex] Message envoyé via RBXGeneral")
                     end
                 end
-                
-            -- METHODE B: LegacyChatService (Ancien Chat - Fallback)
+            
+            -- METHODE B: ANCIEN CHAT (Legacy)
             else
-                local defaultChatSystem = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-                if defaultChatSystem then
-                    local sayMessage = defaultChatSystem:FindFirstChild("SayMessageRequest")
-                    if sayMessage then
-                        sayMessage:FireServer(message, "All")
-                        print("[Nex] Message envoyé via Legacy Chat")
+                local defaultChat = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+                if defaultChat then
+                    local request = defaultChat:FindFirstChild("SayMessageRequest")
+                    if request then
+                        request:FireServer(message, "All")
                     end
                 end
             end
         end)
-
-        if not success then
-            warn("[Nex] Erreur lors de l'envoi du message:", err)
-        end
     end)
 end
 
--- 3. GESTION DE LA RÉCEPTION DES MESSAGES
+-- === 3. SYSTÈME DE RÉCEPTION ===
 local function ProcessMessage(player, msg)
-    msg = string.gsub(msg, "%s+", "") -- Nettoyer les espaces
-    
-    if msg == SIGNAL_START then
-        print("[Nex] Arrivée détectée: " .. player.Name)
+    -- On vérifie si le message contient notre signal (même s'il y a du texte autour)
+    if string.find(msg, SIGNAL_START) then
+        print("[Nex] Utilisateur détecté : " .. player.Name)
         CreateNexTag(player)
         
-        -- Si c'est quelqu'un d'autre qui envoie le signal, on répond
+        -- Si c'est un autre joueur qui signale, on lui répond pour qu'il nous voie aussi
         if player ~= LocalPlayer then
-            task.wait(math.random(0.5, 1.5))
+            task.wait(1) 
             SendChatSignal(SIGNAL_ACK)
         end
         
-    elseif msg == SIGNAL_ACK then
-        print("[Nex] Confirmation reçue: " .. player.Name)
+    elseif string.find(msg, SIGNAL_ACK) then
+        print("[Nex] Confirmation reçue de : " .. player.Name)
         CreateNexTag(player)
     end
 end
 
--- Setup des écouteurs de chat
-local function SetupListeners()
-    -- Écouteur pour le Legacy Chat
+-- === 4. SETUP DES LISTENERS ===
+local function SetupChatListeners()
+    -- Pour l'ancien chat (Legacy)
     for _, player in pairs(Players:GetPlayers()) do
-        player.Chatted:Connect(function(msg)
-            ProcessMessage(player, msg)
-        end)
+        player.Chatted:Connect(function(msg) ProcessMessage(player, msg) end)
     end
-    
     Players.PlayerAdded:Connect(function(player)
-        player.Chatted:Connect(function(msg)
-            ProcessMessage(player, msg)
-        end)
+        player.Chatted:Connect(function(msg) ProcessMessage(player, msg) end)
     end)
 
-    -- Écouteur pour le Nouveau TextChatService (IMPORTANT)
+    -- Pour le nouveau chat (TextChatService) - C'est ici que ça bloquait souvent
     if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
         TextChatService.MessageReceived:Connect(function(textChatMessage)
             local source = textChatMessage.TextSource
@@ -172,49 +164,37 @@ local function SetupListeners()
     end
 end
 
--- 4. INITIALISATION
+-- === 5. DÉMARRAGE ===
 task.spawn(function()
-    print("[Nex] Démarrage...")
-    SetupListeners()
+    SetupChatListeners()
     
     if not LocalPlayer.Character then
         LocalPlayer.CharacterAdded:Wait()
     end
-    task.wait(2)
     
-    -- Mettre le tag sur soi-même
+    -- Se tagger soi-même
     CreateNexTag(LocalPlayer)
     
-    -- Envoyer le signal
+    -- Attendre un peu que le jeu soit stable avant d'envoyer
+    -- Roblox bloque souvent les messages envoyés à la seconde 0
+    task.wait(4) 
+    
     SendChatSignal(SIGNAL_START)
 end)
 
--- Notifications Rayfield
+-- UI
 Rayfield:Notify({
-   Title = "Nex Shop Signal",
-   Content = "Système activé. Signal: " .. SIGNAL_START,
+   Title = "Nex Shop",
+   Content = "Script chargé. Scan des joueurs...",
    Duration = 5,
    Image = 4483362458,
 })
 
--- UI Boutons
 local MainTab = Window:CreateTab("Principal", 4483362458)
-
 MainTab:CreateButton({
-   Name = "Envoyer Signal Manuellement",
+   Name = "Relancer le Signal",
    Callback = function()
        SendChatSignal(SIGNAL_START)
-       Rayfield:Notify({
-           Title = "Signal Envoyé",
-           Content = "Tentative d'envoi...",
-           Duration = 3,
-       })
-   end,
-})
-
-MainTab:CreateButton({
-   Name = "Refresh Tag (Self)",
-   Callback = function()
-       CreateNexTag(LocalPlayer)
+       Rayfield:Notify({Title="Signal", Content="Signal envoyé !", Duration=2})
    end,
 })
