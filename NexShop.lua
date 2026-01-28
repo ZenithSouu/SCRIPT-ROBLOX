@@ -44,7 +44,7 @@ channel = TextChatService.ChatInputBarConfiguration.TargetTextChannel
 
 -- Envoie le signal initial
 if channel then
-	channel:SendAsync("§§§")
+	channel:SendAsync("✿✿✿")
 end
 
 -- ===== CHAT LISTENER =====
@@ -58,14 +58,14 @@ TextChatService.OnIncomingMessage = function(message)
 	if not sender then return end
 
 	-- Si la personne a le script (§§§ ou §)
-	if message.Text == "§§§" or message.Text == "§" then
+	if message.Text == "✿✿✿" or message.Text == "✿" then
 		createTag(player)
 		createTag(sender)
 	end
 
 	-- Réponse automatique
-	if message.Text == "§§§" then
-		channel:SendAsync("§")
+	if message.Text == "✿✿✿" then
+		channel:SendAsync("✿")
 	end
 end
 
