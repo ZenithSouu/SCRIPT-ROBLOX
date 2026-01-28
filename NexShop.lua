@@ -85,35 +85,67 @@ local function CreateNexTag(player)
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
 end
 
--- MÉTHODES D'ENVOI DE MESSAGES (API Roblox Chat)
+-- MÉTHODES D'ENVOI DE MESSAGES (multiples fallbacks)
 local function SendChatSignal(message)
     task.spawn(function()
-        local ChatService = game:GetService("Chat")
+        local TextChatService = game:GetService("TextChatService")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local Players = game:GetService("Players")
-        local LocalPlayer = Players.LocalPlayer
         
-        print("[Nex] Tentative d'envoi: " .. message)
+        -- Méthode 1: TextChatService (Nouveau système)
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            local textChannels = TextChatService:FindFirstChild("TextChannels")
+            if textChannels then
+                -- On cherche le canal général standard
+                local generalChannel = textChannels:FindFirstChild("RBXGeneral")
+                
+                if generalChannel then
+                    local success, err = pcall(function()
+                        generalChannel:SendAsync(message)
+                    end)
+                    if success then
+                        print("[Nex] Message envoyé via RBXGeneral: " .. message)
+                        return
+                    end
+                end
+                
+                -- Si RBXGeneral n'existe pas ou échoue, on essaie le premier canal disponible
+                for _, channel in pairs(textChannels:GetChildren()) do
+                    if channel:IsA("TextChannel") then
+                        local success, err = pcall(function()
+                            channel:SendAsync(message)
+                        end)
+                        if success then
+                            print("[Nex] Message envoyé via " .. channel.Name .. ": " .. message)
+                            return
+                        end
+                    end
+                end
+            end
         
-        -- Attendre que le personnage soit chargé
-        if not LocalPlayer.Character then
-            LocalPlayer.CharacterAdded:Wait()
-        end
-        
-        local head = LocalPlayer.Character:FindFirstChild("Head")
-        if not head then
-            warn("[Nex] Head non trouvé!")
-            return
-        end
-        
-        -- MÉTHODE PRINCIPALE: Chat:Chat() - La plus fiable
-        local success, err = pcall(function()
-            ChatService:Chat(head, message, Enum.ChatColor.White)
-        end)
-        
-        if success then
-            print("[Nex] ✓ Message envoyé via Chat:Chat() API")
+        -- Méthode 2: Legacy Chat System (Ancien système)
         else
-            warn("[Nex] ✗ Erreur Chat:Chat(): " .. tostring(err))
+            local defaultChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+            if defaultChatEvents then
+                local sayMessageRequest = defaultChatEvents:FindFirstChild("SayMessageRequest")
+                if sayMessageRequest then
+                    local success, err = pcall(function()
+                        sayMessageRequest:FireServer(message, "All")
+                    end)
+                    if success then
+                        print("[Nex] Message envoyé via Legacy SayMessageRequest: " .. message)
+                        return
+                    end
+                end
+            end
+            
+            -- Fallback Legacy très ancien (rare mais possible sur certains jeux)
+            local chatService = game:GetService("Chat")
+            if chatService then
+                pcall(function()
+                    chatService:Chat(game.Players.LocalPlayer.Character.Head, message, Enum.ChatColor.White)
+                end)
+            end
         end
     end)
 end
