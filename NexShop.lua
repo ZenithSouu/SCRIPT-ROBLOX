@@ -90,60 +90,28 @@ local function SendChatSignal(message)
     task.spawn(function()
         local TextChatService = game:GetService("TextChatService")
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local Players = game:GetService("Players")
         
-        -- Méthode 1: TextChatService (Nouveau système)
+        -- Méthode 1: TextChatService (Nouveau système - Modern Chat)
+        -- On vérifie explicitement si le jeu utilise le nouveau système
         if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
             local textChannels = TextChatService:FindFirstChild("TextChannels")
-            if textChannels then
-                -- On cherche le canal général standard
-                local generalChannel = textChannels:FindFirstChild("RBXGeneral")
-                
-                if generalChannel then
-                    local success, err = pcall(function()
-                        generalChannel:SendAsync(message)
-                    end)
-                    if success then
-                        print("[Nex] Message envoyé via RBXGeneral: " .. message)
-                        return
-                    end
-                end
-                
-                -- Si RBXGeneral n'existe pas ou échoue, on essaie le premier canal disponible
-                for _, channel in pairs(textChannels:GetChildren()) do
-                    if channel:IsA("TextChannel") then
-                        local success, err = pcall(function()
-                            channel:SendAsync(message)
-                        end)
-                        if success then
-                            print("[Nex] Message envoyé via " .. channel.Name .. ": " .. message)
-                            return
-                        end
-                    end
-                end
-            end
-        
-        -- Méthode 2: Legacy Chat System (Ancien système)
-        else
-            local defaultChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-            if defaultChatEvents then
-                local sayMessageRequest = defaultChatEvents:FindFirstChild("SayMessageRequest")
-                if sayMessageRequest then
-                    local success, err = pcall(function()
-                        sayMessageRequest:FireServer(message, "All")
-                    end)
-                    if success then
-                        print("[Nex] Message envoyé via Legacy SayMessageRequest: " .. message)
-                        return
-                    end
-                end
+            local generalChannel = textChannels and textChannels:FindFirstChild("RBXGeneral")
+            
+            if generalChannel then
+                pcall(function()
+                    generalChannel:SendAsync(message)
+                end)
             end
             
-            -- Fallback Legacy très ancien (rare mais possible sur certains jeux)
-            local chatService = game:GetService("Chat")
-            if chatService then
+        -- Méthode 2: Legacy Chat System (Ancien système)
+        -- C'est la méthode standard pour les anciens jeux Roblox
+        else
+            local defaultChatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+            local sayMessageRequest = defaultChatEvents and defaultChatEvents:FindFirstChild("SayMessageRequest")
+            
+            if sayMessageRequest then
                 pcall(function()
-                    chatService:Chat(game.Players.LocalPlayer.Character.Head, message, Enum.ChatColor.White)
+                    sayMessageRequest:FireServer(message, "All")
                 end)
             end
         end
