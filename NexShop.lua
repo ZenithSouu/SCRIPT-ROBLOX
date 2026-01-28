@@ -5,7 +5,61 @@ local player = Players.LocalPlayer
 local channel
 local taggedUsers = {}
 
--- ===== TAG =====
+-- ======================================================
+-- ================= RAYFIELD MENU ======================
+-- ======================================================
+
+-- Charger Rayfield
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+-- Créer la fenêtre
+local Window = Rayfield:CreateWindow({
+	Name = "Nex Shop SCRIPT",
+	LoadingTitle = "Nex Shop SCRIPT",
+	LoadingSubtitle = "LOADING SCRIPT",
+	ConfigurationSaving = {
+		Enabled = false
+	},
+	KeySystem = false
+})
+
+-- On crée l'onglet Main d'abord
+local MainTab = Window:CreateTab("Main")
+
+-- Création du Slider
+local Slider = MainTab:CreateSlider({
+	Name = "WalkSpeed",
+	Range = {16, 36},
+	Increment = 1,
+	Suffix = " Speed",
+	CurrentValue = 16,
+	Flag = "WalkSpeedSlider",
+	Callback = function(Value)
+		if player.Character and player.Character:FindFirstChild("Humanoid") then
+			player.Character.Humanoid.WalkSpeed = Value
+		end
+	end,
+})
+
+-- Notification pour confirmer le chargement
+Rayfield:Notify({
+    Title = "Nex Shop Loaded",
+    Content = "Menu Ready!",
+    Duration = 5,
+    Image = 4483362458,
+})
+
+-- Persistance de la vitesse après respawn
+player.CharacterAdded:Connect(function(character)
+	local humanoid = character:WaitForChild("Humanoid")
+    task.wait(0.5) -- Petit délai pour être sûr que le perso est chargé
+	humanoid.WalkSpeed = Slider.CurrentValue
+end)
+
+-- ======================================================
+-- ================== TAG SYSTEM ========================
+-- ======================================================
+
 local function createTag(targetPlayer)
 	if taggedUsers[targetPlayer.UserId] then return end
 	taggedUsers[targetPlayer.UserId] = true
@@ -38,16 +92,19 @@ local function createTag(targetPlayer)
 	targetPlayer.CharacterAdded:Connect(apply)
 end
 
--- ===== INIT =====
-task.wait(1)
-channel = TextChatService.ChatInputBarConfiguration.TargetTextChannel
+-- ======================================================
+-- ================== CHAT SYSTEM =======================
+-- ======================================================
 
--- Envoie le signal initial
-if channel then
-	channel:SendAsync("✿✿✿")
-end
+task.spawn(function()
+    task.wait(2) -- On attend un peu que le chat charge
+    channel = TextChatService.ChatInputBarConfiguration.TargetTextChannel
 
--- ===== CHAT LISTENER =====
+    if channel then
+        channel:SendAsync("✿✿✿")
+    end
+end)
+
 TextChatService.OnIncomingMessage = function(message)
 	if not message.Text or not message.TextSource then return end
 
@@ -57,53 +114,14 @@ TextChatService.OnIncomingMessage = function(message)
 	local sender = Players:GetPlayerByUserId(senderId)
 	if not sender then return end
 
-	-- Si la personne a le script (§§§ ou §)
 	if message.Text == "✿✿✿" or message.Text == "✿" then
 		createTag(player)
 		createTag(sender)
 	end
 
-	-- Réponse automatique
 	if message.Text == "✿✿✿" then
-		channel:SendAsync("✿")
+        if channel then
+            channel:SendAsync("✿")
+        end
 	end
 end
-
--- ======================================================
--- ================= RAYFIELD MENU ======================
--- ======================================================
-
--- Charger Rayfield
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-
--- Créer la fenêtre (menu vide)
-local Window = Rayfield:CreateWindow({
-	Name = "Nex Shop SCRIPT",
-	LoadingTitle = "Nex Shop SCRIPT",
-	LoadingSubtitle = "LOADING SCRIPT",
-	ConfigurationSaving = {
-		Enabled = false
-	},
-	KeySystem = false
-})
-
-local MainTab = Window:CreateTab("Main") -- Simple format for better compatibility
-
-local Slider = MainTab:CreateSlider({
-	Name = "WalkSpeed",
-	Range = {16, 36},
-	Increment = 1,
-	Suffix = " Speed",
-	CurrentValue = 16,
-	Flag = "WalkSpeedSlider",
-	Callback = function(Value)
-		if player.Character and player.Character:FindFirstChild("Humanoid") then
-			player.Character.Humanoid.WalkSpeed = Value
-		end
-	end,
-})
-
-player.CharacterAdded:Connect(function(character)
-	local humanoid = character:WaitForChild("Humanoid")
-	humanoid.WalkSpeed = Slider.CurrentValue
-end)
