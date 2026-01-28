@@ -87,7 +87,7 @@ local Window = Rayfield:CreateWindow({
 	KeySystem = false
 })
 
-local MainTab = Window:CreateTab("Main", 4483362458)
+local MainTab = Window:CreateTab("Main") -- Simple format for better compatibility
 
 local Slider = MainTab:CreateSlider({
 	Name = "WalkSpeed",
