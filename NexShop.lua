@@ -70,6 +70,7 @@ local Window = Rayfield:CreateWindow({
 local walkSpeedValue = 16
 local jumpPowerValue = 50
 local espEnabled = false
+local tracersEnabled = false
 local flyEnabled = false
 local flySpeed = 50
 local noClipEnabled = false
@@ -196,6 +197,42 @@ local function applyESP(targetPlayer)
 	update()
 end
 
+local function applyTracer(targetPlayer)
+	if targetPlayer == player then return end
+	local line = Drawing.new("Line")
+	line.Visible = false
+	line.Color = Color3.fromRGB(255, 255, 255)
+	line.Thickness = 1
+	line.Transparency = 1
+
+	local connection
+	connection = RunService.RenderStepped:Connect(function()
+		if not tracersEnabled then
+			line.Visible = false
+			line:Remove()
+			if connection then connection:Disconnect() end
+			return
+		end
+
+		local character = targetPlayer.Character
+		if not character or not character:FindFirstChild("HumanoidRootPart") then
+			line.Visible = false
+			return
+		end
+
+		local root = character.HumanoidRootPart
+		local pos, onScreen = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+
+		if onScreen then
+			line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+			line.To = Vector2.new(pos.X, pos.Y)
+			line.Visible = true
+		else
+			line.Visible = false
+		end
+	end)
+end
+
 VisualTab:CreateToggle({
 	Name = "ESP",
 	CurrentValue = false,
@@ -203,6 +240,18 @@ VisualTab:CreateToggle({
 	Callback = function(Value)
 		espEnabled = Value
 		for _, p in pairs(Players:GetPlayers()) do applyESP(p) end
+	end,
+})
+
+VisualTab:CreateToggle({
+	Name = "Tracers",
+	CurrentValue = false,
+	Flag = "TracersToggle",
+	Callback = function(Value)
+		tracersEnabled = Value
+		if Value then
+			for _, p in pairs(Players:GetPlayers()) do applyTracer(p) end
+		end
 	end,
 })
 
@@ -521,7 +570,10 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
-Players.PlayerAdded:Connect(applyESP)
+Players.PlayerAdded:Connect(function(p)
+    applyESP(p)
+    if tracersEnabled then applyTracer(p) end
+end)
 player.CharacterAdded:Connect(function(char)
 	local hum = char:WaitForChild("Humanoid")
 	hum.WalkSpeed = walkSpeedValue
